@@ -14,7 +14,6 @@
     - 集成sofia status
     - 集成reload sofia_mod
     - 集成restart的操作
-
 '''
 import os
 import subprocess
@@ -54,9 +53,54 @@ def getContainerLog(ContainerID):
     for i in result_list:
         print(i)
         
+def freeswitchStatus():
+    if isRunning('FreeSwitch'):
+        proc = subprocess.check_output(['C:\\Program Files\\FreeSWITCH\\fs_cli.exe', '-x', 'sofia status'], shell = True)
+    else:
+        print('m')
+    #proc.communicate()
+    if proc != 0:
+        result = proc.decode('utf-8')
+        result_list = result.split(' ')
+        result_list_final = []
+        for i in result_list:
+            if i == '':
+                pass
+            else:
+                result_list_final.append(i)
+        for i in result_list_final:
+            if i == 'external::numconvert\tgateway\t':
+                remote_fs_conn_status = result_list_final[result_list_final.index(i) + 1]
+            elif i == 'external::callbox\tgateway\t':
+                callbox_conn_status = result_list_final[result_list_final.index(i) + 1]
+    remote_fs_conn_status_list = remote_fs_conn_status.split('\t')
+    callbox_conn_status_list = callbox_conn_status.split('\t')
+    return remote_fs_conn_status_list[-1][:-2], callbox_conn_status_list[-1][:-2]
 
+def reloadFreeswitch():
+    proc = subprocess.check_output(['C:\\Program Files\\FreeSWITCH\\fs_cli.exe', '-x', 'reload mod_sofia'], shell = True)
+    print(proc.decode('utf-8'))
+
+def stopFreeswitch():
+    proc = subprocess.check_output(['C:\\Program Files\\FreeSWITCH\\fs_cli.exe', '-x', 'shutdown'], shell = True)
+    time.sleep(5)
+    if isRunning('FreeSwitch'):
+        print("not stopped")
+    else:
+        print("stopped")
+def startFreeswitch():
+    proc = subprocess.run(['C:\\Program Files\\FreeSWITCH\\FreeSwitchConsole.exe'], shell = True)
+    time.sleep(5)
+    if isRunning('FreeSwitch'):
+        print("not stopped")
+    else:
+        print("stopped")
+    #print(proc.decode('utf-8'))
 # isRunning('docker')
 # isRunning('FreeSwitch')
-if getContainerID() != None:
-    print("容器正在运行中，正在获取日志")
-    getContainerLog(getContainerID())
+# if getContainerID() != None:
+#     print("容器正在运行中，正在获取日志")
+#     getContainerLog(getContainerID())
+freeswitchStatus()
+#a = subprocess.check_call('C:\\Program Files\\FreeSWITCH\\fs_cli.exe')
+#startFreeswitch()
