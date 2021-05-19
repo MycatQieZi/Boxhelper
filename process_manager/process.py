@@ -77,6 +77,8 @@ def freeswitchStatus():
         proc = 0
         print('m')
     #proc.communicate()
+    remote_fs_conn_status = ''
+    callbox_conn_status = ''
     if proc != 0:
         result = proc.decode('utf-8')
         result_list = result.split(' ')
@@ -133,7 +135,8 @@ def stopFreeswitch():
 # if getContainerID() != None:
 #     print("容器正在运行中，正在获取日志")
 #     getContainerLog(getContainerID())
-remote_fs_conn_status, callbox_conn_status = freeswitchStatus()
-print(remote_fs_conn_status, callbox_conn_status)
+if __name__ == '__main__':
+    fs_con_status, callbox_con_status = freeswitchStatus()
+    print(fs_con_status, callbox_con_status)
 #a = subprocess.check_call('C:\\Program Files\\FreeSWITCH\\fs_cli.exe')
 #startFreeswitch()
