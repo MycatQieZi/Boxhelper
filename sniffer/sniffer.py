@@ -1,89 +1,249 @@
-'''
-该程序是为了实现抓包模块的相关功能，抓包模块主要包括以下的功能
-
-- 抓包
-
-- 协议解析
-
-- 保存上传
-
-- 
-'''
-import pcapy
-import Parser.py
-import datetime
+# -*- coding:utf-8 -*-
 from struct import *
-from PyQt5.QtCore import QThread,pyqtSignal
-from PyQt5.QtWidgets import QApplication
-import sys
+import socket
+import datetime
+import pcapy
+import warnings
+warnings.filterwarnings("ignore",category=DeprecationWarning)
 
-class Sniffer(QThread):
-    signal = pyqtSignal()
+def eth_addr(a):
+    return ":".join("%02x" % i for i in a)
 
-    def __init__(self,dev,filt,parent=None):
-        super(Sniffer,self).__init__(parent)
-        self._run = True
-        self._dev = dev
-        self.fil = filt
-        self.pack_list = []
-    def run(self):
-        # 列举出可利用的设备
-        # devices = pcapy.findalldevs()
-        # print (devices)
-        #
-        # for d in devices:
-        #     print (d)
+def parserPacket(header, packet):
+    package_content = {}
+    pcap_header = {}
+    time_now = datetime.datetime.now()
+    time = datetime.datetime.strftime(time_now, '%Y-%m-%d %H:%M:%S')
+    header_len = header.getlen()
+    pcap_header["Time"] = time
+    pcap_header["Package_len"] = str(header_len)
+    package_content.update(pcap_header)
 
-        #self.dev = input("Enter device name to sniff: ")
-        # print ("Sniffer device is: " + dev)
-        #dev = "{B2298B5C-F6B2-441F-8B03-ACA781ABF925}"
+    ethh_context = {"Destination MAC": 0, "Source MAC": 0, "Protocol": 8}
+    eth_len = 14
+    eth_header = packet[:eth_len]
+    eth = eth_headereth = unpack("!6s6sH", eth_header)
+    eth_protocol = socket.ntohs(eth[2])
+    ethh_context["Destination MAC"] = eth_addr(packet[0:6])
+    ethh_context["Source MAC"] = eth_addr(packet[6:12])
+    ethh_context["Protocol"] = str(eth_protocol)
 
-        # 参数：打开的设备，抓取数据包的最大的字节数，是否设为混杂模式（1），等待数据包的延迟时间（毫秒）
-        cap = pcapy.open_live(self._dev, 65536, 1, 0)
+    if str(eth_protocol) == '1544':
+        ethh_content["protocol"] = "ARP"
+    package_content.update(ethh_context)
 
-        # 进行过滤
-        if self.fil != 0:
-            #print (type(self.fil))
-            #print ("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
-            cap.setfilter(self.fil)
-        # 开始嗅探
-        #i=0
-        print(cap)
-        while self._run :
-            (header, packet) = cap.next()
-            if len(packet) >= 14:
+    if eth_protocol == 8:
+        ip_header = packet[eth_len:20 + eth_len]
+        iph = unpack('!BBHHHBBH4s4s', ip_header)
+        version_ih1 = iph[0]
+        version = version_ih1 >> 4
+        print("ip version:", version)
+        ihl = version_ih1 & 0xF
+        iph_length = ihl * 4
+        service = iph[1]
+        total_ip_length = iph[2]
+        identification = iph[3]
+        flag0 = iph[4]
+        flag = flag0 >> 3
+        ttl = iph[5]
+        protocol = iph[6]  # 1:ICMP  2:IGMP  6:TCP  17:UDP  50:ESP  47:GRE
+        checksum = iph[7]
+        s_addr = socket.inet_ntoa(iph[8])
+        d_addr = socket.inet_ntoa(iph[9])
+        iph_context = {"IP Version": 4, "IP Header Length": 5, "TTL": 0, "Protocol based on IP": 1, "Checksum": 0,
+                        "Source": 0, "Destination": 0}
+        iph_context["IP Version"] = str(version)
+        iph_context["IP Header Length"] = str(ihl)
+        iph_context["TTL"] = str(ttl)
+        iph_context["Protocol based on IP"] = str(protocol)
+        if str(protocol) == "6":
+            ethh_context["Protocol"] == "TCP" 
+        elif str(protocol) == "1":
+            ethh_context["Protocol"] == "ICMP"
+        elif str(protocol) == "17":
+            ethh_context["Protocol"] == "udp"
+        else:
+            ethh_context["Protocol"] == "other protocol"
+        iph_context["Checksum"] = str(checksum)
+        iph_context["Source"] = s_addr
+        iph_context["Destination"] = d_addr
 
-                p = Parser.parse()
-                after_parse = p.parse_packet(header,packet)  # 解析包
+        package_content.update(ethh_context)
+        package_content.update(iph_context)
+        if protocol == 6:
+            t = iph_length + eth_len
+            tcp_header = packet[t:t + 20]
 
-                if after_parse != None:
-                    after_parse["Original_hex"] = packet.hex()
+            tcph = unpack('!HHLLBBHHH', tcp_header)
+            # print ("tcph: ",tcph)
 
-                    self.pack_list.append(after_parse) # pcap包中的数据解析
-                    #print ("after parse: ",after_parse)
+            s_port = tcph[0]  # 源端口
+            d_port = tcph[1]  # 目的端口
+            sequence = tcph[2]  # 序列号
+            ack = tcph[3]  # 确认号
+            # tcph_length = tcph[4] #TCP头部长度
+            # doff_reversed = tcph[5]  # 保留字段
+            # tcph_length = doff_reversed >> 4 #TCP 头长度
+            doff_reserved = tcph[4]
+            tcph_length = doff_reserved >> 4
 
-                #self.signal.emit(self.pack_list) # 发送信号
-                    self.signal.emit()
-                #print("pack_list: ", self.pack_list)
-                # i+=1
-                # print (i)
-                    self.sleep(1)
+            window = tcph[6]
+            checksum_tcp = tcph[7]
+            urgepkt = tcph[8]
 
-    def stop(self):
-        self._run = False
+            # print ("Source Port: " + str(s_port) + " Destination Port: " + str(d_port) + " Sequence Number: " + str(sequence) +\
+            #     " Acknowledge Number: " + str(ack)  + " TCP Header Length: " + str(tcph_length) + " Window length: " + str(window) + " Checksum_tcp: " + str(checksum_tcp) + " Urgepkt: " + str(urgepkt))
 
-    def get_pack(self):
-        pack = self.pack_list.pop(0)
-        return pack
+            h_size = eth_len + iph_length + tcph_length * 4  # ???
+            data_size = len(packet) - h_size
 
-    # def get_orig(self):
-    #     pack_o = self.pack_orig.pop(0)
-    #     return pack_o
+            #data = packet[h_size:]
+            data = str(s_port)+ "->" + str(d_port)
+            # print("TCP Data: " + str(data))
 
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    #sniffer = Sniffer('{0F761049-52DF-48FC-954C-9AEF70011A72}')
-    sniffer.start()
-    sys.exit(app.exec_())
-# sniffer = Sniffer('{B2298B5C-F6B2-441F-8B03-ACA781ABF925}')
-# sniffer.start()
+            tcph_context = {"Source Port": 0, "Destination Port": 0, "Sequence Number": 0, "Acknowledge Number": 0, \
+                            "TCP Header Length": 0, "Window length": 0, "Checksum_tcp": 0, "Urgepkt": 0,
+                            "Data": 0}
+            tcph_context["Source Port"] = str(s_port)
+            tcph_context["Destination Port"] = str(d_port)
+            tcph_context["Sequence Number"] = str(sequence)
+            tcph_context["Acknowledge Number"] = str(ack)
+            tcph_context["TCP Header Length"] = str(tcph_length)
+            tcph_context["Window length"] = str(window)
+            tcph_context["Checksum_tcp"] = str(checksum_tcp)
+            tcph_context["Urgepkt"] = str(urgepkt)
+            tcph_context["Data"] = str(data)
+            # print("tcph_context: ", tcph_context)
+            package_content.update(tcph_context)
+            return package_content
+        # ICMP 包
+        elif protocol == 1:
+            u = iph_length + eth_len
+            icmph_length = 8
+            icmp_header = packet[u:u + 8]
+
+            icmph = unpack("!BBHHH", icmp_header)
+            # print ("icmph: " ,icmph)
+
+            icmp_type = icmph[0]
+            code = icmph[1]
+            checksum_icmp = icmph[2]
+            identifier = icmph[3]
+            sequence_icmp = icmph[4]
+
+            # print ("ICMP Type: " + str(icmp_type) + " ICMP Code: " + str(code) + " ICMP Checksum: " + str(checksum_icmp))
+
+            h_size = iph_length + eth_len + icmph_length
+            data_size = len(packet) - h_size
+            #data = packet[h_size:]
+            data = str(icmp_type) + " id=" + str(identifier) + " seq=" + str(sequence_icmp)
+            # print ("ICMP data: " + str(data))
+
+            icmph_context = {"ICMP Type": 0, "ICMP Code": 0, "ICMP Checksum": 0, "Identifier": 0,"Sequence":0}
+            icmph_context["ICMP Type"] = str(icmp_type)
+            icmph_context["ICMP Code"] = str(code)
+            icmph_context["ICMP Checksum"] = str(checksum_icmp)
+            icmph_context["Identifier"] = str(identifier)
+            icmph_context["Sequence"] = str(sequence_icmp)
+            icmph_context["Data"] = str(data)
+
+            # print ("ICMP Header Context: ",icmph_context)
+
+            package_content.update(icmph_context)
+            return package_content
+
+
+        # #UDP包
+        elif protocol == 17: # UDP
+            u = iph_length + eth_len
+            udp_length = 8
+            udp_header = packet[u:u + 8]
+            # print ("udp_h: "+str(udp_header))
+
+            udph = unpack("!HHHH", udp_header)
+            # print ("udph: "+str(udph))
+
+            sourceport = udph[0]
+            destinport = udph[1]
+            userpacket_length = udph[2]
+            checksum_udp = udph[3]
+
+            # print ("Souce port: " + str(sourceport)+" Destination port: " + str(destinport) + " User packet length: " + str(userpacket_length) +\
+            #        " Checksum UDP: " + str(checksum_udp))
+
+            h_length = eth_len + iph_length + udp_length
+            data_size = len(packet) - h_length
+            #data = packet[h_length:]
+            data = str(sourceport) + " -> " + str(destinport) + " Len=" + str(userpacket_length)
+            # print ("UDP data: " + str(data))
+
+            udph_context = {"Souce port": 0, "Destination port": 0, "User packet length": 0, "Checksum UDP": 0,
+                            "Data": 0}
+            udph_context["Souce port"] = str(sourceport)
+            udph_context["Destination port"] = str(destinport)
+            udph_context["User packet length"] = str(userpacket_length)
+            udph_context["Checksum UDP"] = str(checksum_udp)
+            udph_context["Data"] = str(data)
+
+            # print ("UDP Header Context: ",udph_context)
+
+            package_content.update(udph_context)
+            return package_content
+
+        else:
+            non = {"Data":0}
+            package_content.update(non)
+            return package_content
+            #return ("Protocol is not TCP,ICMP,UDP")
+
+    elif eth_protocol == 1544 :#0x0608
+        #print ("&&&&&&&&&&&&&&&&&&&&&&&&&&&&")
+        arp_header = packet[eth_len: 28+ eth_len]
+        arph = unpack('!HHBBH6s4s6s4s',arp_header)
+
+        hardware_type = arph[0]
+        pro_type = arph[1]
+        hardware_size = arph[2]
+        pro_size = arph[3]
+        op = arph[4]
+        sender_MAC = eth_addr(arph[5])
+        sender_IP = socket.inet_ntoa(arph[6])
+        target_MAC = eth_addr(arph[7])
+        target_IP = socket.inet_ntoa(arph[8])
+
+        arph_context = {"Hardware type": 1, "Protocol type": 4, "Hardware size": 6, "Protocol Size": 4, "Opcode": 1, \
+                        "Source" : 0, "Source IP Address": 0, "Destination": 0, "Destination IP Address": 0}
+        arph_context["Hardware type"] = hardware_type
+        arph_context["Protocol type"] = pro_type
+        arph_context["Hardware size"] = hardware_size
+        arph_context["Protocol Size"] = pro_size
+        arph_context["Opcode"] = op
+        arph_context["Source"] = sender_MAC
+        arph_context["Sender IP Address"] = sender_IP
+        arph_context["Destination"] = target_MAC
+        arph_context["Target IP Address"] = target_IP
+        arph_context["Data"] = "Who has" + target_IP +"? Tell " + sender_IP
+
+        package_content.update(arph_context)
+        return package_content
+
+def getDevices():
+    devices = pcapy.findalldevs()
+    return devices
+def run(dev, filter, Status):
+     
+    pack_list = []
+    cap = pcapy.open_live(dev, 65535, 1, 0)
+    if filter != 0:
+        cap.setfilter(filter)
+    while Status:
+        (header, packet) = cap.next()
+        if len(packet) >= 14:
+            parse = parserPacket(header, packet)
+            if parse != None:
+                parse["Original_hex"] = packet.hex()
+                pack_list.append(parse)
+                print(parse)
+    return pack_list
+pack_list = run(getDevices()[0], "udp", True)
+
