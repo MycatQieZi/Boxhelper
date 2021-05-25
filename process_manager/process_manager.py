@@ -15,64 +15,103 @@
     - 集成reload sofia_mod
     - 集成restart的操作
 '''
-import os
+import os, sys, traceback
 import subprocess
 import time
 import psutil
+
+# try:
+#     from subprocess import DEVNULL
+# except ImportError:
+#     DEVNULL = os.open(os.devnull, os.O_RDWR)
 
 FREESWITCH_PROCESS_KEYWORD = "FreeSwitch"
 DOCKER_PROCESS_KEYWORD = "docker"
 
 
-class Process_Manager:
+class ProcessManager:
 
     def __init__(self):
         bonk = 'bonk'
+
+    def is818Running(self):
+        if self.isRunning(DOCKER_PROCESS_KEYWORD):
+            hello_info = self.getContainerInfo()
+            if hello_info:
+                hello_id = hello_info[0]
+                hello_name = hello_info[-1]
+                return hello_id and hello_name=="hello"
+
+        return False
 
     def isRunning(self, progress_name):
         '''
         该函数是一个判断函数，返回的是True、False的bool值判断
         输入应该是准确的进程名docker、FreeSwitch
         '''
+        #print('tasklist | findstr ' + progress_name)
+        #print(os.popen('tasklist | findstr ' + progress_name).readlines())
+        # process = len(os.popen('tasklist | findstr ' + progress_name).readlines())
         try:
-            #print('tasklist | findstr ' + progress_name)
-            #print(os.popen('tasklist | findstr ' + progress_name).readlines())
-            process = len(os.popen('tasklist | findstr ' + progress_name).readlines())
-            #print(process)
+
+            # p1 = subprocess.check_output(["tasklist"], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
+            # p2 = subprocess.Popen(["findstr", progress_name], stdin=p1.stdout, stderr=subprocess.STDOUT, stdout=subprocess.PIPE, shell=True)
+            # p1.stdout.close()  # Allow p1 to receive a SIGPIPE if p2 exits.
+            # output = p2.communicate()[0]
+            # print(output)
+            # process = len(output)
+            process = len(subprocess.check_output(["tasklist", "|", "findstr", progress_name], shell=True, stdin=subprocess.DEVNULL, stderr=subprocess.STDOUT))
+        except subprocess.CalledProcessError:
+            print(progress_name + " is not running")
+            raise
+        except Exception:
+            raise 
+        else:
             if process >= 1:
                 print(progress_name + " is running")
                 return True
             else: 
                 print(progress_name + " is not running")
                 return False
-        except:
-            print("程序错误")
-            return False
+       
 
-    def getContainerID(self):
+    def getContainerInfo(self):
         '''
         该函数功能是查看目前的长在运行的容器的ContainerID，没有输入，输出为uContainerID
         '''
         #proc = subprocess.Popen('cmd.exe',creationflags=subprocess.CREATE_NEW_CONSOLE, shell = True, stdout =  subprocess.PIPE)
         #time.sleep(5)
-        proc = subprocess.check_output(["docker", "ps"], shell = True)
+        try:
+            proc = subprocess.check_output(["docker", "ps"], shell = True, stdin=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError:
+            print('check_output on "docker ps" command returned nothing' )
+            return None  
+
         if proc != None:
             result = proc.decode('utf-8')
             result_list = result.split('\n')
-            return result_list[1].split(' ')[0]
+            return result_list[1].split(' ') if len(result_list)>=2 else None
         return None
 
-    def getContainerLog(self, ContainerID):
+    def getContainerLog(self, containerID, line_count=100):
         '''
         该函数是依据上一个函数得到的ContainerID查看器日志内容并按行输出
         输入：ContainerID
         输出：<list>logs
         '''
-        proc = subprocess.check_output(["docker", "logs", ContainerID], shell = True)
+        try:
+            cmd = ["docker", "logs", "--tail", str(line_count), containerID]
+            cmd_test = ['type', 'test.log']
+            proc = subprocess.check_output(cmd, shell = True, stdin=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError:
+            print('check_output on "docker logs %s" command returned nothing' %(containerID) )
+            return None
+        
         result = proc.decode('utf-8')
         result_list = result.split('\n')
-        for i in result_list:
-            print(i)
+        # for i in result_list:
+        #     print(i)
+        return result_list
             
     def freeswitchStatus(self):
         '''
@@ -80,11 +119,18 @@ class Process_Manager:
         输入：
         输出：<str>callbox注册状态，<str>numconvert注册状态
         '''
-        if self.isRunning(FREESWITCH_PROCESS_KEYWORD):
-            proc = subprocess.check_output(['C:\\Program Files\\FreeSWITCH\\fs_cli.exe', '-x', 'sofia status'], shell = True)
-        else:
-            proc = 0
-            print('m')
+        try:
+            self.isRunning(FREESWITCH_PROCESS_KEYWORD)
+        except subprocess.CalledProcessError:
+            print('FreeSWITCH is not running')
+            return None
+        
+        try:
+            proc = subprocess.check_output(['C:\\Program Files\\FreeSWITCH\\fs_cli.exe', '-x', 'sofia status'], shell = True, stdin=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError:
+            print('sofia status returned nothing')
+            return None
+
         #proc.communicate()
         remote_fs_conn_status = ''
         callbox_conn_status = ''
@@ -112,8 +158,13 @@ class Process_Manager:
         输入：
         输出：fs重新加载的输出日志
         '''
-        proc = subprocess.check_output(['C:\\Program Files\\FreeSWITCH\\fs_cli.exe', '-x', 'reload mod_sofia'], shell = True)
-        print(proc.decode('utf-8'))
+        try:
+            proc = subprocess.check_output(['C:\\Program Files\\FreeSWITCH\\fs_cli.exe', '-x', 'reload mod_sofia'], shell = True, stdin=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError:
+            print('reload mod_sofia returned nothing')
+            return 
+        else:
+            print(proc.decode('utf-8'))
 
     def stopFreeswitch(self):
         '''
@@ -121,23 +172,38 @@ class Process_Manager:
         输入：
         输出：
         '''
-        proc = subprocess.check_output(['C:\\Program Files\\FreeSWITCH\\fs_cli.exe', '-x', 'shutdown'], shell = True)
-        time.sleep(5)
-        if self.isRunning(FREESWITCH_PROCESS_KEYWORD):
-            print("not stopped")
+        try:
+            proc = subprocess.check_output(['C:\\Program Files\\FreeSWITCH\\fs_cli.exe', '-x', 'shutdown'], shell = True, stdin=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError:
+            print("fs_cli -x shutdown returned nothing")
+            return 0
         else:
-            print("stopped")
-    # def startFreeswitch():
-    #     proc = subprocess.run(['C:\\Program Files\\FreeSWITCH\\FreeSwitchConsole.exe'], shell = True)
-    #     time.sleep(5)
-    #     if isRunning('FreeSwitch'):
-    #         print("not stopped")
-    #     else:
-    #         print("stopped")
-        #print(proc.decode('utf-8'))
+            time.sleep(5)
+            try:
+                self.isRunning(FREESWITCH_PROCESS_KEYWORD)
+            except subprocess.CalledProcessError:
+                print("fs console not stopped")
+                return 0
+            else:
+                print("fs console stopped")
+                return 1
 
+    def startFreeswitch(self):
+        try:
+            proc = subprocess.run(['C:\\Program Files\\FreeSWITCH\\FreeSwitchConsole.exe'], shell = True)
+        except Exception:
+            return 0
+        else:
+            time.sleep(5)
+            try:
+                self.isRunning(FREESWITCH_PROCESS_KEYWORD)
 
-
+            except subprocess.CalledProcessError:
+                print("fs is stopped")
+            else:
+                print("fs is running")
+                print(proc.decode('utf-8'))
+                return 1
 
 # isRunning('docker')
 # isRunning('FreeSwitch')
