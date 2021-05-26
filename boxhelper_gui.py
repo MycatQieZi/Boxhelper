@@ -397,14 +397,17 @@ class BoxGUI(Frame):
 		ttk.Separator(self.tab3, orient='horizontal').grid(row=1, padx=20, columnspan=2, sticky="ew")
 		
 		Label(self.tab3, text ="FS服务:") \
-			.grid(column = 0, row = 2, padx = 30, pady = 10)
+			.grid(column = 0, row = 2, padx = 30, pady = 10, sticky="w")
 		Label(self.tab3, textvariable = self.fs_status)\
 			.grid(column = 1, row = 2, padx = 30, pady = 10)
 
 		Label(self.tab3, text ="线路状态:") \
-			.grid(column = 0, row = 3, padx = 30, pady = 10)
+			.grid(column = 0, row = 3, padx = 30, pady = 10, sticky="w")
 		Label(self.tab3, textvariable = self.sofia_status)\
 			.grid(column = 1, row = 3, padx = 30, pady = 10)
+
+		Label(self.tab3, text ="提示: \"启动/停止\"命令发送后, 请稍等片刻后, 手动点击\"刷新\"按钮获取服务状态") \
+			.grid(column = 0, row = 6, padx = 30, pady = 30, columnspan=6, sticky="w")
 
 		# update button
 		self.fs_update_button = Button(self.tab3, text = "刷新", width=7,

@@ -178,7 +178,6 @@ class ProcessManager:
             print("fs_cli -x shutdown returned nothing")
             return 0
         else:
-            time.sleep(5)
             try:
                 self.isRunning(FREESWITCH_PROCESS_KEYWORD)
             except subprocess.CalledProcessError:
@@ -190,11 +189,11 @@ class ProcessManager:
 
     def startFreeswitch(self):
         try:
-            proc = subprocess.run(['C:\\Program Files\\FreeSWITCH\\FreeSwitchConsole.exe'], shell = True)
+            proc = subprocess.Popen(['C:\\Program Files\\FreeSWITCH\\FreeSwitchConsole.exe', '-nc'], creationflags=subprocess.DETACHED_PROCESS)
         except Exception:
+            print(traceback.format_exc())
             return 0
         else:
-            time.sleep(5)
             try:
                 self.isRunning(FREESWITCH_PROCESS_KEYWORD)
 
@@ -202,7 +201,7 @@ class ProcessManager:
                 print("fs is stopped")
             else:
                 print("fs is running")
-                print(proc.decode('utf-8'))
+                # print(proc.decode('utf-8'))
                 return 1
 
 # isRunning('docker')
